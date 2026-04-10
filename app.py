@@ -52,31 +52,91 @@ with st.expander("Preview dataset"):
 def train_model(data_hash, dataframe):
     X = dataframe[feature_names]
     y = dataframe[target_name]
-    
+
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
-    
+
     model = Pipeline([
         ("scaler", StandardScaler()),
         ("svr", SVR(kernel="rbf", C=100, gamma=0.1, epsilon=0.1))
     ])
-    
+
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
-    
+
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
     r2 = r2_score(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
-    
+
     return model, X_test, y_test, y_pred, rmse, r2, mae
 
 with st.spinner("Training SVR model on your dataset..."):
     model, X_test, y_test, y_pred, rmse, r2, mae = train_model(len(df), df)
 
+# ── Generate visualizations (outside tabs, cache_resource for Figure objects) ──
+@st.cache_resource
+def generate_visualizations():
+    figs = []
+
+    # 1. Target Distribution
+    fig1, ax = plt.subplots(figsize=(10, 5))
+    sns.histplot(df[target_name], kde=True, color='blue', ax=ax)
+    ax.set_title("Distribution of House Prices (MEDV)")
+    figs.append(fig1)
+
+    # 2. Correlation Heatmap
+    corr = df.corr()[target_name].abs().sort_values(ascending=False)
+    top_features = corr.index[:10]
+    fig2, ax = plt.subplots(figsize=(10, 8))
+    sns.heatmap(df[top_features].corr(), annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
+    ax.set_title("Correlation Heatmap (with Target MEDV)")
+    figs.append(fig2)
+
+    # 3. Actual vs Predicted
+    fig3, ax = plt.subplots(figsize=(8, 6))
+    ax.scatter(y_test, y_pred, alpha=0.7, color='blue')
+    ax.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
+    ax.set_xlabel("Actual Prices")
+    ax.set_ylabel("Predicted Prices")
+    ax.set_title("Actual vs Predicted Prices")
+    figs.append(fig3)
+
+    # 4. Residual Plot
+    residuals = y_test - y_pred
+    fig4, ax = plt.subplots(figsize=(8, 6))
+    ax.scatter(y_pred, residuals, alpha=0.7, color='purple')
+    ax.axhline(y=0, color='r', linestyle='--')
+    ax.set_xlabel("Predicted Prices")
+    ax.set_ylabel("Residuals")
+    ax.set_title("Residual Plot")
+    figs.append(fig4)
+
+    # 5. Residual Distribution
+    fig5, ax = plt.subplots(figsize=(8, 5))
+    sns.histplot(residuals, kde=True, color='teal', ax=ax)
+    ax.set_title("Residual Distribution")
+    ax.set_xlabel("Residuals")
+    figs.append(fig5)
+
+    # 6. Feature Importance (approximate via absolute dual coefficients)
+    svr = model.named_steps['svr']
+    importance = np.abs(svr.dual_coef_).sum(axis=0)
+    feat_imp = pd.DataFrame({
+        'Feature': feature_names,
+        'Importance': importance[:len(feature_names)]
+    }).sort_values(by='Importance', ascending=False)
+
+    fig6, ax = plt.subplots(figsize=(10, 6))
+    sns.barplot(data=feat_imp, x='Importance', y='Feature', palette='viridis', ax=ax)
+    ax.set_title("Feature Importance (SVR)")
+    figs.append(fig6)
+
+    return figs
+
 st.divider()
 
-# ── Tabs for better organization ───────────────────────────────
+# ── Tabs ───────────────────────────────────────────────────────
 tab1, tab2, tab3 = st.tabs(["🔮 Make Prediction", "📊 Visualizations & Analysis", "ℹ️ Model Information"])
 
 with tab1:
@@ -108,10 +168,10 @@ with tab1:
         col = col1 if i % 2 == 0 else col2
         with col:
             val = st.number_input(
-                feat, 
-                value=default, 
-                step=0.01, 
-                format="%.4f", 
+                feat,
+                value=default,
+                step=0.01,
+                format="%.4f",
                 help=desc
             )
             inputs.append(val)
@@ -119,9 +179,9 @@ with tab1:
     if st.button("🔮 Predict House Price", type="primary", use_container_width=True):
         input_array = np.array(inputs).reshape(1, -1)
         prediction = model.predict(input_array)[0]
-        
+
         st.success(f"### Predicted Median House Price: **${prediction:,.2f}k**")
-        
+
         if prediction < 15:
             st.info("💡 This indicates a relatively lower-priced area.")
         elif prediction < 35:
@@ -139,70 +199,8 @@ with tab1:
 
 with tab2:
     st.subheader("Exploratory Data Analysis & Model Evaluation")
-    
-    # Generate visualizations
-   @st.cache_resource
-   def generate_visualizations():
-        figs = []
-        
-        # 1. Target Distribution
-        fig1, ax = plt.subplots(figsize=(10, 5))
-        sns.histplot(df[target_name], kde=True, color='blue', ax=ax)
-        ax.set_title("Distribution of House Prices (MEDV)")
-        figs.append(fig1)
-        
-        # 2. Correlation Heatmap
-        corr = df.corr()[target_name].abs().sort_values(ascending=False)
-        top_features = corr.index[:10]
-        fig2, ax = plt.subplots(figsize=(10, 8))
-        sns.heatmap(df[top_features].corr(), annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
-        ax.set_title("Correlation Heatmap (with Target MEDV)")
-        figs.append(fig2)
-        
-        # 3. Actual vs Predicted
-        fig3, ax = plt.subplots(figsize=(8, 6))
-        ax.scatter(y_test, y_pred, alpha=0.7, color='blue')
-        ax.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
-        ax.set_xlabel("Actual Prices")
-        ax.set_ylabel("Predicted Prices")
-        ax.set_title("Actual vs Predicted Prices")
-        figs.append(fig3)
-        
-        # 4. Residual Plot
-        residuals = y_test - y_pred
-        fig4, ax = plt.subplots(figsize=(8, 6))
-        ax.scatter(y_pred, residuals, alpha=0.7, color='purple')
-        ax.axhline(y=0, color='r', linestyle='--')
-        ax.set_xlabel("Predicted Prices")
-        ax.set_ylabel("Residuals")
-        ax.set_title("Residual Plot")
-        figs.append(fig4)
-        
-        # 5. Residual Distribution
-        fig5, ax = plt.subplots(figsize=(8, 5))
-        sns.histplot(residuals, kde=True, color='teal', ax=ax)
-        ax.set_title("Residual Distribution")
-        ax.set_xlabel("Residuals")
-        figs.append(fig5)
-        
-        # 6. Feature Importance (using |dual_coef_| for RBF SVR approximation)
-        svr = model.named_steps['svr']
-        # For RBF kernel we approximate importance via absolute dual coefficients summed per feature
-        importance = np.abs(svr.dual_coef_).sum(axis=0)
-        feat_imp = pd.DataFrame({
-            'Feature': feature_names,
-            'Importance': importance[:len(feature_names)]
-        }).sort_values(by='Importance', ascending=False)
-        
-        fig6, ax = plt.subplots(figsize=(10, 6))
-        sns.barplot(data=feat_imp, x='Importance', y='Feature', palette='viridis', ax=ax)
-        ax.set_title("Feature Importance (SVR)")
-        figs.append(fig6)
-        
-        return figs
-
     visualization_figures = generate_visualizations()
-    
+
     for i, fig in enumerate(visualization_figures):
         st.pyplot(fig)
         st.caption(f"Visualization {i+1}")
