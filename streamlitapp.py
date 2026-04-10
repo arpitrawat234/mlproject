@@ -40,7 +40,6 @@ descriptions   = [
 
 # Input form
 st.subheader("Enter House Features")
-
 inputs = []
 col1, col2 = st.columns(2)
 
