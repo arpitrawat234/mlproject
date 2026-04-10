@@ -141,8 +141,8 @@ with tab2:
     st.subheader("Exploratory Data Analysis & Model Evaluation")
     
     # Generate visualizations
-    @st.cache_data
-    def generate_visualizations():
+   @st.cache_resource
+def generate_visualizations():
         figs = []
         
         # 1. Target Distribution
