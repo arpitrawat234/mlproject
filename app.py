@@ -142,7 +142,7 @@ with tab2:
     
     # Generate visualizations
    @st.cache_resource
-def generate_visualizations():
+   def generate_visualizations():
         figs = []
         
         # 1. Target Distribution
